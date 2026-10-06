@@ -298,6 +298,11 @@ class JobManager:
             if current_segment:
                 raw_candidate_segments.append(current_segment)
 
+            if sampled_count == 0:
+                raise ValueError(
+                    "No video frames could be decoded. Please try another video format or contact the site owner."
+                )
+
             job.stages_completed["detecting_slides"] = True
             job.candidate_slides_count = len(raw_candidate_segments)
             job.progress_pct = 65

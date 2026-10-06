@@ -9,6 +9,8 @@ import re
 import cv2
 import yt_dlp
 import logging
+import shutil
+import subprocess
 from typing import Generator, Tuple, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -131,9 +133,56 @@ def sample_frames_incremental(
     Yields (timestamp_seconds, frame_bgr, frame_index).
     Does NOT load the entire video into RAM!
     """
-    cap = cv2.VideoCapture(video_path)
+    processing_path = video_path
+    fallback_path: Optional[str] = None
+
+    # OpenCV's bundled decoder cannot read every browser-created MP4. In
+    # particular, cloud containers often fail on AV1 uploads even though they
+    # can still read the file metadata. Normalise only those files that fail a
+    # real frame decode, keeping ordinary H.264 uploads fast.
+    probe = cv2.VideoCapture(video_path)
+    can_decode = probe.isOpened()
+    if can_decode:
+        can_decode, _ = probe.read()
+    probe.release()
+
+    if not can_decode:
+        ffmpeg_path = shutil.which("ffmpeg")
+        if not ffmpeg_path:
+            raise ValueError(
+                "This video codec is not supported by the server and FFmpeg is unavailable to convert it."
+            )
+
+        stem, _ = os.path.splitext(video_path)
+        fallback_path = f"{stem}_opencv_compatible.mp4"
+        command = [
+            ffmpeg_path, "-y", "-i", video_path,
+            "-map", "0:v:0", "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "24",
+            "-c:a", "aac", "-movflags", "+faststart", fallback_path,
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=600,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError("Video conversion timed out after 10 minutes.") from exc
+
+        if completed.returncode != 0 or not os.path.exists(fallback_path):
+            detail = (completed.stderr or "unknown FFmpeg error").splitlines()[-1:]
+            raise ValueError(f"Could not convert this video to a readable format: {' '.join(detail)}")
+
+        processing_path = fallback_path
+        logger.info("Converted unsupported video codec to H.264 for OpenCV processing: %s", video_path)
+
+    cap = cv2.VideoCapture(processing_path)
     if not cap.isOpened():
-        raise ValueError(f"Could not open video file: {video_path}")
+        raise ValueError(f"Could not open video file: {processing_path}")
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     if not fps or fps <= 0:
@@ -163,6 +212,11 @@ def sample_frames_incremental(
             current_frame_idx += step_frames
     finally:
         cap.release()
+        if fallback_path and os.path.exists(fallback_path):
+            try:
+                os.remove(fallback_path)
+            except OSError:
+                logger.warning("Could not remove temporary converted video: %s", fallback_path)
 
 
 def remove_temp_video(video_path: str) -> None:
