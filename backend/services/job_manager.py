@@ -239,7 +239,7 @@ class JobManager:
             job.stages_completed["sampling_frames"] = True
             job.stage_message = "Scanning video frames & detecting slide transitions..."
 
-            raw_candidate_segments: List[List[Dict[str, Any]]] = []
+            candidate_slides: List[Dict[str, Any]] = []
             current_segment: List[Dict[str, Any]] = []
             prev_frame = None
             ref_frame = None
@@ -274,15 +274,16 @@ class JobManager:
                 metrics_ref = calculate_frame_difference_metrics(ref_frame, frame) if ref_frame is not None else metrics_prev
 
                 if is_slide_change(metrics_prev, sensitivity=job.sensitivity) or is_slide_change(metrics_ref, sensitivity=job.sensitivity):
-                    # Transition event triggered: close current segment and begin new one
+                    # Transition event triggered: immediately pick best frame from current_segment and free extra frames
                     if current_segment:
-                        raw_candidate_segments.append(current_segment)
+                        candidate_slides.append(select_best_frame(current_segment))
+                        job.candidate_slides_count = len(candidate_slides)
                     current_segment = [frame_entry]
                     ref_frame = frame
                 else:
                     # Same slide: buffer frame to analyze clarity/motion
-                    # Keep at most 5 frames per segment to bound memory usage
-                    if len(current_segment) < 5:
+                    # Keep at most 4 frames per active segment to strictly bound RAM on 512MB cloud servers
+                    if len(current_segment) < 4:
                         current_segment.append(frame_entry)
                     else:
                         # Replace last if current has higher sharpness
@@ -296,7 +297,7 @@ class JobManager:
                 prev_frame = frame
 
             if current_segment:
-                raw_candidate_segments.append(current_segment)
+                candidate_slides.append(select_best_frame(current_segment))
 
             if sampled_count == 0:
                 raise ValueError(
@@ -304,17 +305,9 @@ class JobManager:
                 )
 
             job.stages_completed["detecting_slides"] = True
-            job.candidate_slides_count = len(raw_candidate_segments)
+            job.candidate_slides_count = len(candidate_slides)
             job.progress_pct = 65
-            job.stage_message = f"Detected {len(raw_candidate_segments)} raw candidate slides. Selecting clearest frames..."
-
-            # ---------------------------------------------------------
-            # STAGE 4: Intelligent Frame Selection
-            # ---------------------------------------------------------
-            candidate_slides: List[Dict[str, Any]] = []
-            for seg in raw_candidate_segments:
-                best = select_best_frame(seg)
-                candidate_slides.append(best)
+            job.stage_message = f"Detected {len(candidate_slides)} raw candidate slides. Deduplicating..."
 
             # ---------------------------------------------------------
             # STAGE 5: Duplicate Removal & Slide Saving
