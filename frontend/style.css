@@ -116,6 +116,32 @@ body {
   border: 1px solid #a7f3d0;
 }
 
+.badge-author {
+  background: linear-gradient(135deg, #fdf2f8, #eef2ff);
+  color: #be185d;
+  border: 1px solid #f9a8d4;
+  gap: 0.35rem;
+  box-shadow: 0 1px 4px rgba(236, 72, 153, 0.12);
+  transition: var(--transition);
+}
+
+.badge-author:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(236, 72, 153, 0.22);
+}
+
+.bow-icon {
+  display: inline-block;
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: transform 0.25s ease;
+}
+
+.badge-author:hover .bow-icon,
+.footer-pill:hover .bow-icon {
+  transform: rotate(-12deg) scale(1.15);
+}
+
 .badge-neutral {
   background-color: #f1f5f9;
   color: #475569;
@@ -845,6 +871,39 @@ details[open] .chevron {
 @keyframes slideIn {
   from { transform: translateY(100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+/* Decorative Author Footer */
+.app-footer {
+  padding: 1.75rem 1.5rem 2.25rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.footer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.15rem;
+  background: linear-gradient(135deg, #ffffff, #fdf2f8);
+  border: 1px solid #fbcfe8;
+  border-radius: 9999px;
+  font-size: 0.88rem;
+  color: #334155;
+  box-shadow: 0 2px 10px rgba(236, 72, 153, 0.08);
+  transition: var(--transition);
+}
+
+.footer-pill strong {
+  color: #be185d;
+  font-weight: 700;
+}
+
+.footer-pill:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.18);
+  border-color: #f472b6;
 }
 
 @media (max-width: 768px) {
